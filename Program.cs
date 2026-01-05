@@ -89,8 +89,7 @@ app.MapGet("/htmx/posts/{id:int}", async (
     int id,
     JsonPlaceholderClient jsonPlaceholderClient,
     RazorViewStringRenderer razor,
-    CancellationToken cancellationToken) =>
-{
+    CancellationToken cancellationToken) => {
     if (id <= 0) 
         return Results.BadRequest("id must be > 0");
 
