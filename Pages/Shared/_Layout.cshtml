@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>@ViewData["Title"]</title>
+
+        <!-- Pico CSS via CDN -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@picocss/pico@@2/css/pico.min.css" />
+
+        <!-- Google Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;600&family=Merriweather:wght@400;700&display=swap" />
+
+        <link rel="stylesheet" href="/site.css" />
+
+        <!-- HTMX -->
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    </head>
+    <body>
+        <header class="container">
+            <nav>
+                <ul>
+                    <li><strong>Minimal + HTMX + Razor</strong></li>
+                </ul>
+                <ul>
+
+                    @if (User?.Identity?.IsAuthenticated ?? false)
+                    {
+                        <li class="muted">Hello, @User.Identity!.Name</li>
+                        <li><a href="/logout">Logout</a></li>
+                    }
+                    else
+                    {
+                        <li><a href="/login">Login</a></li>
+                    }
+
+                </ul>
+            </nav>
+        </header>
+        <main class="container">
+            @RenderBody()
+        </main>
+    </body>
+</html>

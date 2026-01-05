@@ -1,0 +1,29 @@
+@page
+@model MinimalHtmxRazor.Pages.IndexModel
+
+@{
+    ViewData["Title"] = "Posts";
+}
+
+<section class="grid">
+  <article>
+    <h2>Posts</h2>
+
+    <div
+      hx-get="/htmx/posts"
+      hx-trigger="load"
+      hx-target="#posts"
+      hx-swap="innerHTML">
+      <p class="muted">Loading posts...</p>
+    </div>
+
+    <div id="posts"></div>
+  </article>
+
+  <article>
+    <h2>Details</h2>
+    <div id="details">
+      <p class="muted">Select a post to view details.</p>
+    </div>
+  </article>
+</section>

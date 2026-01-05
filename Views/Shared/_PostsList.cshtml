@@ -1,0 +1,32 @@
+@model List<MinimalHtmxRazor.Models.Post>
+
+@if (Model.Count == 0)
+{
+    <p class="muted">No posts found.</p>
+}
+else
+{
+    <table role="grid">
+        <thead>
+            <tr>
+                <th style="width: 5rem;">Id</th>
+                <th>Title</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            @foreach (var p in Model)
+            {
+                <tr 
+                    class="post-row" 
+                    hx-get="/htmx/posts/@p.Id" 
+                    hx-target="#details" 
+                    hx-swap="innerHTML">
+                    <td>@p.Id</td>
+                    <td>@p.Title</td>
+                </tr>
+            }
+
+        </tbody>
+    </table>
+}

@@ -1,0 +1,35 @@
+@model MinimalHtmxRazor.Models.PostWithComments
+
+<article>
+    <header>
+        <h3>@Model.Post.Title</h3>
+        <p class="muted">Post @Model.Post.Id (User @Model.Post.UserId)</p>
+    </header>
+
+    <p>@Model.Post.Body</p>
+
+    <details open>
+        <summary>Comments (@Model.Comments.Count)</summary>
+
+        @if (Model.Comments.Count == 0)
+        {
+            <p class="muted">No comments.</p>
+        }
+        else
+        {
+            <ul>
+
+                @foreach (var c in Model.Comments)
+                {
+                    <li>
+                        <strong>@c.Name</strong>
+                        <span class="muted">(@c.Email)</span>
+                        <div>@c.Body</div>
+                    </li>
+                }
+
+            </ul>
+        }
+
+    </details>
+</article>
