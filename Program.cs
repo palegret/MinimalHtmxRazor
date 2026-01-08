@@ -15,8 +15,13 @@ builder.Services.AddScoped<RazorViewStringRenderer>();
 
 // HttpClient for JSONPlaceholder
 builder.Services.AddHttpClient<JsonPlaceholderClient>(httpClient => {
-    var baseUrl = builder.Configuration["JsonPlaceholder:BaseUrl"]!; 
-    httpClient.BaseAddress = new Uri(baseUrl);
+    var baseUrl = builder.Configuration["JsonPlaceholder:BaseUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        baseUrl = "https://jsonplaceholder.typicode.com/";
+    }
+
+    httpClient.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
 });
 
 // Auth: Entra ID web app sign-in (cookie + OpenID Connect)
