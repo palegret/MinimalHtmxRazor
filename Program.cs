@@ -6,7 +6,7 @@ using MinimalHtmxRazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Razor support (no controllers required, but we reuse the view engine)
+// Razor support (we reuse the view engine)
 builder.Services.AddRazorPages();
 builder.Services.AddControllersWithViews();
 
@@ -15,16 +15,13 @@ builder.Services.AddScoped<RazorViewStringRenderer>();
 
 // HttpClient for JSONPlaceholder
 builder.Services.AddHttpClient<JsonPlaceholderClient>(httpClient => {
-    var baseUrl = builder.Configuration["JsonPlaceholder:BaseUrl"];
-    if (string.IsNullOrWhiteSpace(baseUrl))
-    {
-        baseUrl = "https://jsonplaceholder.typicode.com/";
-    }
+    var uriString = builder.Configuration["JsonPlaceholder:BaseUrl"] 
+        ?? "https://jsonplaceholder.typicode.com/"; 
 
-    httpClient.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+    httpClient.BaseAddress = new Uri(uriString);
 });
 
-// Auth: Entra ID web app sign-in (cookie + OpenID Connect)
+// Entra ID web app sign-in (cookie + OpenID Connect)
 builder.Services
     .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
@@ -35,14 +32,19 @@ var app = builder.Build();
 
 app.UseStaticFiles();
 app.UseRouting();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Razor Pages shell
 app.MapRazorPages();
 
-// Login/logout endpoints
+
+
+// =============================================================================
+// Endpoints
+// =============================================================================
+
+
+// Authentication
+
 app.MapGet("/login", (HttpContext ctx) => {
     return Results.Challenge(
         authenticationSchemes: [OpenIdConnectDefaults.AuthenticationScheme],
@@ -65,14 +67,21 @@ app.MapGet("/logout", (HttpContext ctx) => {
 });
 
 
-// JSON API endpoints
+// JSON API
 
-app.MapGet("/api/posts", async (JsonPlaceholderClient jsonPlaceholderClient, CancellationToken cancellationToken) => {
+app.MapGet("/api/posts", async (
+    JsonPlaceholderClient jsonPlaceholderClient, 
+    CancellationToken cancellationToken
+) => {
     var posts = await jsonPlaceholderClient.GetPostsAsync(cancellationToken);
     return Results.Ok(posts);
 });
 
-app.MapGet("/api/posts/{id:int}", async (int id, JsonPlaceholderClient jsonPlaceholderClient, CancellationToken cancellationToken) => {
+app.MapGet("/api/posts/{id:int}", async (
+    int id, 
+    JsonPlaceholderClient jsonPlaceholderClient, 
+    CancellationToken cancellationToken
+) => {
     if (id <= 0) 
         return Results.BadRequest(new { error = "id must be > 0" });
 
@@ -80,21 +89,25 @@ app.MapGet("/api/posts/{id:int}", async (int id, JsonPlaceholderClient jsonPlace
     return model is null ? Results.NotFound() : Results.Ok(model);
 });
 
-// HTMX endpoints returning HTML fragments
+
+// HTMX API
+
 app.MapGet("/htmx/posts", async (
     JsonPlaceholderClient jsonPlaceholderClient,
-    RazorViewStringRenderer razor,
-    CancellationToken cancellationToken) => {
+    RazorViewStringRenderer razorViewStringRenderer,
+    CancellationToken cancellationToken
+) => {
     var posts = await jsonPlaceholderClient.GetPostsAsync(cancellationToken);
-    var html = await razor.RenderPartialAsync("_PostsList", posts);
+    var html = await razorViewStringRenderer.RenderPartialAsync("_PostsList", posts);
     return Results.Content(html, "text/html");
 });
 
 app.MapGet("/htmx/posts/{id:int}", async (
     int id,
     JsonPlaceholderClient jsonPlaceholderClient,
-    RazorViewStringRenderer razor,
-    CancellationToken cancellationToken) => {
+    RazorViewStringRenderer razorViewStringRenderer,
+    CancellationToken cancellationToken
+) => {
     if (id <= 0) 
         return Results.BadRequest("id must be > 0");
 
@@ -103,8 +116,9 @@ app.MapGet("/htmx/posts/{id:int}", async (
     if (model is null) 
         return Results.NotFound();
 
-    var html = await razor.RenderPartialAsync("_PostDetail", model);
+    var html = await razorViewStringRenderer.RenderPartialAsync("_PostDetail", model);
     return Results.Content(html, "text/html");
 }).RequireAuthorization(); // Example: protect details behind login
+
 
 app.Run();
