@@ -417,6 +417,7 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# Application settings files
+# Application and local user settings
+.vscode/settings.json
 appsettings.json
 appsettings.*.json
