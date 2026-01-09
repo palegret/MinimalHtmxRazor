@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Identity.Web;
 using MinimalHtmxRazor.Rendering;
@@ -15,8 +16,8 @@ builder.Services.AddScoped<RazorViewStringRenderer>();
 
 // HttpClient for JSONPlaceholder
 builder.Services.AddHttpClient<JsonPlaceholderClient>(httpClient => {
-    var uriString = builder.Configuration["JsonPlaceholder:BaseUrl"] 
-        ?? "https://jsonplaceholder.typicode.com/"; 
+    var uriString = builder.Configuration["JsonPlaceholder:BaseUrl"]
+        ?? "https://jsonplaceholder.typicode.com/";
 
     httpClient.BaseAddress = new Uri(uriString);
 });
@@ -25,6 +26,62 @@ builder.Services.AddHttpClient<JsonPlaceholderClient>(httpClient => {
 builder.Services
     .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
+
+static bool IsHtmx(HttpRequest httpRequest) =>
+    string.Equals(httpRequest.Headers["HX-Request"], "true", StringComparison.OrdinalIgnoreCase);
+
+static string GetReturnUrl(HttpRequest httpRequest)
+{
+    // Prefer HX-Current-URL for HTMX requests
+    var hxCurrentUrlValid = httpRequest.Headers.TryGetValue("HX-Current-URL", out var currentUrl);
+
+    if (hxCurrentUrlValid)
+    {
+        var currentUrlValid = Uri.TryCreate(currentUrl!, UriKind.Absolute, out var uri);
+
+        if (currentUrlValid && uri is not null)
+            return uri.PathAndQuery;
+    }
+
+    // Fallback for non-HTMX requests
+    return httpRequest.Path + httpRequest.QueryString;
+}
+
+builder.Services.ConfigureApplicationCookie(options => {
+    options.Events ??= new CookieAuthenticationEvents();
+
+    options.Events.OnRedirectToLogin = (redirectContext) => {
+        if (IsHtmx(redirectContext.Request))
+        {
+            redirectContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+            var returnUrl = GetReturnUrl(redirectContext.Request);
+            var hxRedirectUrl = $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+            redirectContext.Response.Headers["HX-Redirect"] = hxRedirectUrl;
+
+            return Task.CompletedTask;
+        }
+
+        redirectContext.Response.Redirect(redirectContext.RedirectUri);
+        return Task.CompletedTask;
+    };
+
+    options.Events.OnRedirectToAccessDenied = (redirectContext) => {
+        if (IsHtmx(redirectContext.Request))
+        {
+            redirectContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+
+            var returnUrl = GetReturnUrl(redirectContext.Request);
+            var hxRedirectUrl = $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+            redirectContext.Response.Headers["HX-Redirect"] = hxRedirectUrl;
+
+            return Task.CompletedTask;
+        }
+
+        redirectContext.Response.Redirect(redirectContext.RedirectUri);
+        return Task.CompletedTask;
+    };
+});
 
 builder.Services.AddAuthorization();
 
@@ -45,14 +102,18 @@ app.MapRazorPages();
 
 // Authentication
 
-app.MapGet("/login", (HttpContext ctx) => {
+app.MapGet("/login", (HttpContext httpContext) => {
+    var returnUrl = httpContext.Request.Query["returnUrl"].ToString();
+
+    if (string.IsNullOrWhiteSpace(returnUrl))
+        returnUrl = "/";
+
     return Results.Challenge(
         authenticationSchemes: [OpenIdConnectDefaults.AuthenticationScheme],
-        properties: new AuthenticationProperties {
-            RedirectUri = "/"
-        }
+        properties: new AuthenticationProperties { RedirectUri = returnUrl }
     );
 });
+
 
 app.MapGet("/logout", (HttpContext ctx) => {
     return Results.SignOut(
@@ -70,7 +131,7 @@ app.MapGet("/logout", (HttpContext ctx) => {
 // JSON API
 
 app.MapGet("/api/posts", async (
-    JsonPlaceholderClient jsonPlaceholderClient, 
+    JsonPlaceholderClient jsonPlaceholderClient,
     CancellationToken cancellationToken
 ) => {
     var posts = await jsonPlaceholderClient.GetPostsAsync(cancellationToken);
@@ -78,11 +139,11 @@ app.MapGet("/api/posts", async (
 });
 
 app.MapGet("/api/posts/{id:int}", async (
-    int id, 
-    JsonPlaceholderClient jsonPlaceholderClient, 
+    int id,
+    JsonPlaceholderClient jsonPlaceholderClient,
     CancellationToken cancellationToken
 ) => {
-    if (id <= 0) 
+    if (id <= 0)
         return Results.BadRequest(new { error = "id must be > 0" });
 
     var model = await jsonPlaceholderClient.GetPostWithCommentsAsync(id, cancellationToken);
@@ -108,12 +169,12 @@ app.MapGet("/htmx/posts/{id:int}", async (
     RazorViewStringRenderer razorViewStringRenderer,
     CancellationToken cancellationToken
 ) => {
-    if (id <= 0) 
+    if (id <= 0)
         return Results.BadRequest("id must be > 0");
 
     var model = await jsonPlaceholderClient.GetPostWithCommentsAsync(id, cancellationToken);
 
-    if (model is null) 
+    if (model is null)
         return Results.NotFound();
 
     var html = await razorViewStringRenderer.RenderPartialAsync("_PostDetail", model);
