@@ -22,18 +22,20 @@ builder.Services.AddHttpClient<JsonPlaceholderClient>(httpClient => {
     httpClient.BaseAddress = new Uri(uriString);
 });
 
-// Entra ID web app sign-in (cookie + OpenID Connect)
 builder.Services
-    .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+    .AddAuthentication(authenticationOptions => {
+        authenticationOptions.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        authenticationOptions.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    })
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("EntraId"));
 
 static bool IsHtmx(HttpRequest httpRequest) =>
-    string.Equals(httpRequest.Headers["HX-Request"], "true", StringComparison.OrdinalIgnoreCase);
+    string.Equals(httpRequest.Headers["Hx-Request"], "true", StringComparison.OrdinalIgnoreCase);
 
 static string GetReturnUrl(HttpRequest httpRequest)
 {
     // Prefer HX-Current-URL for HTMX requests
-    var hxCurrentUrlValid = httpRequest.Headers.TryGetValue("HX-Current-URL", out var currentUrl);
+    var hxCurrentUrlValid = httpRequest.Headers.TryGetValue("Hx-Current-URL", out var currentUrl);
 
     if (hxCurrentUrlValid)
     {
@@ -47,10 +49,60 @@ static string GetReturnUrl(HttpRequest httpRequest)
     return httpRequest.Path + httpRequest.QueryString;
 }
 
-builder.Services.ConfigureApplicationCookie(options => {
-    options.Events ??= new CookieAuthenticationEvents();
+builder.Services.PostConfigure<CookieAuthenticationOptions>(
+    CookieAuthenticationDefaults.AuthenticationScheme,
+    cookieAuthenticationOptions =>{
+        cookieAuthenticationOptions.LoginPath = "/login";
+        cookieAuthenticationOptions.AccessDeniedPath = "/login";
 
-    options.Events.OnRedirectToLogin = (redirectContext) => {
+        cookieAuthenticationOptions.Events ??= new CookieAuthenticationEvents();
+
+        cookieAuthenticationOptions.Events.OnRedirectToLogin = redirectContext => {
+            if (IsHtmx(redirectContext.Request))
+            {
+                redirectContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+                var returnUrl = GetReturnUrl(redirectContext.Request);
+                var hxRedirectUrl = $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+                redirectContext.Response.Headers["Hx-Redirect"] = hxRedirectUrl;
+
+                return Task.CompletedTask;
+            }
+
+            redirectContext.Response.Redirect(redirectContext.RedirectUri);
+            return Task.CompletedTask;
+        };
+
+        cookieAuthenticationOptions.Events.OnRedirectToAccessDenied = ctx =>
+        {
+            if (string.Equals(ctx.Request.Headers["HX-Request"], "true", StringComparison.OrdinalIgnoreCase))
+            {
+                var returnUrl =
+                    ctx.Request.Headers.TryGetValue("HX-Current-URL", out var currentUrl) &&
+                    Uri.TryCreate(currentUrl!, UriKind.Absolute, out var uri) &&
+                    uri is not null
+                        ? uri.PathAndQuery
+                        : ctx.Request.Path + ctx.Request.QueryString;
+
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                ctx.Response.Headers["HX-Redirect"] =
+                    $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+
+                return Task.CompletedTask;
+            }
+
+            ctx.Response.Redirect(ctx.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
+
+builder.Services.ConfigureApplicationCookie(cookieAuthenticationOptions => {
+    cookieAuthenticationOptions.LoginPath = "/login";
+    cookieAuthenticationOptions.AccessDeniedPath = "/login";
+
+    cookieAuthenticationOptions.Events ??= new CookieAuthenticationEvents();
+
+    cookieAuthenticationOptions.Events.OnRedirectToLogin = (redirectContext) => {
         if (IsHtmx(redirectContext.Request))
         {
             redirectContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -66,7 +118,7 @@ builder.Services.ConfigureApplicationCookie(options => {
         return Task.CompletedTask;
     };
 
-    options.Events.OnRedirectToAccessDenied = (redirectContext) => {
+    cookieAuthenticationOptions.Events.OnRedirectToAccessDenied = (redirectContext) => {
         if (IsHtmx(redirectContext.Request))
         {
             redirectContext.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -122,7 +174,7 @@ app.MapGet("/logout", (HttpContext ctx) => {
         },
         authenticationSchemes: [
             OpenIdConnectDefaults.AuthenticationScheme,
-            "Cookies"
+            CookieAuthenticationDefaults.AuthenticationScheme
         ]
     );
 });
