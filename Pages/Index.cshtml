@@ -3,6 +3,8 @@
 
 @{
     ViewData["Title"] = "Posts";
+    var postIdParam = Request.Query["postId"].ToString();
+    var hasPostId = int.TryParse(postIdParam, out var parsedPostId) && parsedPostId > 0;
 }
 
 <section class="grid">
@@ -23,8 +25,22 @@
 
   <article>
     <h2>Details</h2>
-    <div id="details">
-      <p class="muted">Select a post to view details.</p>
-    </div>
+
+    @if (hasPostId)
+    {
+        <div id="details"
+            hx-get="/htmx/posts/@parsedPostId"
+            hx-trigger="load"
+            hx-swap="innerHTML">
+            <p class="muted">Loading post details...</p>
+        </div>
+    }
+    else
+    {
+        <div id="details">
+            <p class="muted">Select a post to view details.</p>
+        </div>
+    }
+
   </article>
 </section>
