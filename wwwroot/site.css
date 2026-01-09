@@ -18,3 +18,12 @@ h6 {
 .muted {
   opacity: 0.8;
 }
+
+/* HTMX indicator: hidden by default, shown during a request */
+#posts-loading {
+  display: none;
+}
+
+#posts-loading.htmx-request {
+  display: block;
+}
